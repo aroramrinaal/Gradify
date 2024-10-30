@@ -150,7 +150,7 @@ def input_image_setup(image_paths):
 
 @app.route('/hello', methods=['GET'])
 def hello():
-    return jsonify({'message': 'gradify backend baby'})
+    return jsonify({'message': 'hello world'})
 
 @app.route('/api/grade/image', methods=['POST', 'OPTIONS'])
 def grade_image():

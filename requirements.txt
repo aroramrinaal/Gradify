@@ -1,4 +1,3 @@
-streamlit
 google-generativeai
 python-dotenv
 werkzeug
@@ -6,10 +5,7 @@ flask
 flask-cors
 PyPDF2
 langchain
-chromadb
 faiss-cpu
 langchain_google_genai
-regex
 langchain-community
 Pillow==10.0.0
-gunicorn

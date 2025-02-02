@@ -150,7 +150,7 @@ def input_image_setup(image_paths):
 
 @app.route('/', methods=['GET'])
 def index():
-    return jsonify({'message': 'gradify backend baby'})
+    return jsonify({'message': 'gradify is back'})
 
 @app.route('/hello', methods=['GET'])
 def hello():

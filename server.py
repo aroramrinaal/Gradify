@@ -22,11 +22,33 @@ CORS(app)
 load_dotenv()
 API_KEY = os.getenv("GOOGLE_API_KEY")
 genai.configure(api_key=API_KEY)
+WINSTON_API_KEY = os.getenv('WINSTON_API_KEY')
+WINSTON_API_URL = 'https://api.gowinston.ai/v2/plagiarism'
 
 # Initialize variables
 visualization_data = []
 percentage_grade = None
 letter_grade = None
+
+def check_plagiarism(text):
+    headers = {
+        'Authorization': f'Bearer {WINSTON_API_KEY}',
+        'Content-Type': 'application/json'
+    }
+    data = {
+        'text': text
+    }
+    response = requests.post(WINSTON_API_URL, headers=headers, json=data)
+    if response.status_code == 200:
+        data = response.json()
+        result = {
+            'score': data.get('result', {}).get('score', 0),
+            'sources': [{'url': source.get('url', ''), 'source': source.get('source', '')} for source in data.get('sources', [])]
+        }
+        return result
+    else:
+        return {'error': 'Failed to check plagiarism'}
+
 
 def convert_text_to_documents(text_chunks):
     return [Document(page_content=chunk) for chunk in text_chunks]
@@ -255,6 +277,7 @@ def grade_pdf():
         responses = ""
 
         for key, value in raw_text.items():
+            #plagiarism_result = check_plagiarism(value)
             text_chunks = get_text_chunks(value)
             get_vector_store(text_chunks)
             rubric_text = get_pdf_text([temp_rubric.name]) if temp_rubric.name else None

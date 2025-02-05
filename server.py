@@ -22,11 +22,33 @@ CORS(app)
 load_dotenv()
 API_KEY = os.getenv("GOOGLE_API_KEY")
 genai.configure(api_key=API_KEY)
+WINSTON_API_KEY = os.getenv('WINSTON_API_KEY')
+WINSTON_API_URL = 'https://api.gowinston.ai/v2/plagiarism'
 
 # Initialize variables
 visualization_data = []
 percentage_grade = None
 letter_grade = None
+
+def check_plagiarism(text):
+    headers = {
+        'Authorization': f'Bearer {WINSTON_API_KEY}',
+        'Content-Type': 'application/json'
+    }
+    data = {
+        'text': text
+    }
+    response = requests.post(WINSTON_API_URL, headers=headers, json=data)
+    if response.status_code == 200:
+        data = response.json()
+        result = {
+            'score': data.get('result', {}).get('score', 0),
+            'sources': [{'url': source.get('url', ''), 'source': source.get('source', '')} for source in data.get('sources', [])]
+        }
+        return result
+    else:
+        return {'error': 'Failed to check plagiarism'}
+
 
 def convert_text_to_documents(text_chunks):
     return [Document(page_content=chunk) for chunk in text_chunks]
@@ -216,6 +238,72 @@ def grade_image():
         return jsonify({
             'status': 'success',
             'response': response
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/grade/pdf', methods=['POST', 'OPTIONS'])
+def grade_pdf():
+    try:
+        if 'pdf' not in request.files:
+            return jsonify({'error': 'No PDF file uploaded'}), 400
+        
+        pdf_file = request.files.getlist('pdf')
+        rubric_file = request.files.get('rubric')
+        question = request.form.get('question')
+        
+        if not question:
+            return jsonify({'error': 'No question provided'}), 400
+
+        temp_pdfs = []
+        pdf_names = []
+
+        for pdf in pdf_file:
+            with tempfile.NamedTemporaryFile(delete=False) as temp_pdf:
+                pdf.save(temp_pdf.name)
+                temp_pdfs.append(temp_pdf.name)
+                pdf_names.append(pdf.filename)
+                temp_pdf.close()
+        
+        with tempfile.NamedTemporaryFile(delete=False) as temp_rubric:
+            rubric_file.save(temp_rubric.name)
+            temp_rubric.close()
+            
+        raw_text = get_pdf_text(temp_pdfs)
+        responses = ""
+
+        for key, value in raw_text.items():
+            #plagiarism_result = check_plagiarism(value)
+            text_chunks = get_text_chunks(value)
+            get_vector_store(text_chunks)
+            rubric_text = get_pdf_text([temp_rubric.name]) if temp_rubric.name else None
+
+            if rubric_text:
+                for rubric_key in rubric_text:
+                    rubric_str = rubric_text[rubric_key]
+
+                rubric_chain = get_rubric_chain()
+
+                response = rubric_chain({"input_documents": convert_text_to_documents([rubric_str])}, return_only_outputs=True)
+                rubric_text = response["output_text"]
+            
+            chain = get_conversational_chain(rubric=rubric_text)
+            
+            documents = convert_text_to_documents(text_chunks)
+            
+            response = chain({"input_documents": documents, "rubric": rubric_text, "question": question}, return_only_outputs=True)
+            responses += f"\nResponse for {pdf_names[temp_pdfs.index(key)]}: \n\n" + response['output_text']
+            
+            create_visualizations(response["output_text"])
+            extract_criteria_and_values(response["output_text"])
+        
+        for temp in temp_pdfs:
+            os.unlink(temp)
+        os.unlink(temp_rubric.name)
+        
+        return jsonify({
+            'status': 'success',
+            'response': responses
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500

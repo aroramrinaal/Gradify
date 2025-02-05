@@ -212,79 +212,10 @@ def grade_image():
         # Process response for visualization
         create_visualizations(response)
         extract_criteria_and_values(response)
-            
-        # Clean up temporary files
-        for temp in temp_images:
-            os.unlink(temp)
         
         return jsonify({
             'status': 'success',
             'response': response
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/grade/pdf', methods=['POST', 'OPTIONS'])
-def grade_pdf():
-    try:
-        if 'pdf' not in request.files:
-            return jsonify({'error': 'No PDF file uploaded'}), 400
-        
-        pdf_file = request.files.getlist('pdf')
-        rubric_file = request.files.get('rubric')
-        question = request.form.get('question')
-        
-        if not question:
-            return jsonify({'error': 'No question provided'}), 400
-
-        temp_pdfs = []
-        pdf_names = []
-
-        for pdf in pdf_file:
-            with tempfile.NamedTemporaryFile(delete=False) as temp_pdf:
-                pdf.save(temp_pdf.name)
-                temp_pdfs.append(temp_pdf.name)
-                pdf_names.append(pdf.filename)
-                temp_pdf.close()
-        
-        with tempfile.NamedTemporaryFile(delete=False) as temp_rubric:
-            rubric_file.save(temp_rubric.name)
-            temp_rubric.close()
-            
-        raw_text = get_pdf_text(temp_pdfs)
-        responses = ""
-
-        for key, value in raw_text.items():
-            text_chunks = get_text_chunks(value)
-            get_vector_store(text_chunks)
-            rubric_text = get_pdf_text([temp_rubric.name]) if temp_rubric.name else None
-
-            if rubric_text:
-                for rubric_key in rubric_text:
-                    rubric_str = rubric_text[rubric_key]
-
-                rubric_chain = get_rubric_chain()
-
-                response = rubric_chain({"input_documents": convert_text_to_documents([rubric_str])}, return_only_outputs=True)
-                rubric_text = response["output_text"]
-            
-            chain = get_conversational_chain(rubric=rubric_text)
-            
-            documents = convert_text_to_documents(text_chunks)
-            
-            response = chain({"input_documents": documents, "rubric": rubric_text, "question": question}, return_only_outputs=True)
-            responses += f"\nResponse for {pdf_names[temp_pdfs.index(key)]}: \n\n" + response['output_text']
-            
-            create_visualizations(response["output_text"])
-            extract_criteria_and_values(response["output_text"])
-        
-        for temp in temp_pdfs:
-            os.unlink(temp)
-        os.unlink(temp_rubric.name)
-        
-        return jsonify({
-            'status': 'success',
-            'response': responses
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
